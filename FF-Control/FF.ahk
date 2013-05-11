@@ -3,7 +3,7 @@ global num = 0
 global received, lastmessage, firstStart = 1
 IfWinNotExist, ahk_class MozillaWindowClass
 {
-	MsgBox Firefox Not Found`nLaunching with Extension`nPlease Install and Restart
+    MsgBox Firefox Not Found`nLaunching with Extension`nPlease Install and Restart
 	runwait, firefox.exe ext\mozrepl@hyperstruct.net.xpi
 	MsgBox Firefox Restarting`nHit OK When Firefox Has Reopened
 	reload
@@ -130,6 +130,10 @@ class FF
 	  return FF_Do(this.pwb . ".document.getSelection();")
 	}
 	
+	execScript(js) {
+		return FF_Do(this.pwb . ".document.location.href = 'JavaScript:" . js . "'")
+	}
+	
 	LoadWait(){
 		while(FF_Do(this.pwb . "1.isLoadingDocument") && FF_Do(this.pwb . "1.busyFlags")){
 			sleep,25
@@ -201,20 +205,6 @@ class FF
 }
 
 
-;##############################################################################
-;*** These functions extend WS2 to handle nonblocking recv
-
-; configure socket for nonblocking reads
-; returns 0 on success
-;~ __FF_SetNonblocking(socket) {
-  ;~ FIONBIO := 0x8004667e
-  ;~ return DllCall("Ws2_32\ioctlsocket", "UInt", socket, "UInt", FIONBIO, "UInt", &FIONBIO)
-;~ }
-
-; returns data received, or empty string
-; use __FF_LastRecvStatus to determine condition in case of empty string
-
-;*
 
 ;##############################################################################
 ;*** Lower-level socket operations to connect to MozRepl
@@ -238,6 +228,7 @@ FF_Connect(host = "127.0.0.1", port=4242) {
 	}
 	catch e{
 		TrayTip, Error,% e.Message
+		return -1
 	}
 	if (sock <= 0) {
 		return -1
@@ -247,6 +238,7 @@ FF_Connect(host = "127.0.0.1", port=4242) {
 	}
 	catch e{
 		TrayTip, Error,% e.Message
+		return -1
 	}
 	if(sock > 0){
 		__FF_Socket(sock)
@@ -286,7 +278,8 @@ FF_Send(senddata) {
 		}
 		return
 	}
-    return FF_Recv()
+	timeout = 200
+    return FF_Recv(timeout)
 }
 
 ; get data
@@ -295,6 +288,10 @@ FF_Send(senddata) {
 FF_Recv(timeout=0) {
   global lastmessage, received
     while(!lastmessage){
+		if(A_Index > timeout){
+			FF_Connect()
+			break
+		}
         sleep,5
     }
     response := received
@@ -317,6 +314,7 @@ __FF_RecvSock(sock, buff = "") {
         received .= buff
         received := RegExReplace(received, "\n?repl\d?>")
 		received := RegExReplace(received, """", "")
+		received := RegExReplace(received, " $")
         lastmessage = 1
         return
     }
